@@ -1,4 +1,8 @@
-# promptfleet
+<div align="center">
+  <img src="./logo.png" alt="promptfleet" width="420" />
+
+  **🚀 Run one Codex prompt across every local repo 🚀**
+</div>
 
 promptfleet is a small Python CLI for running one Codex prompt across every git repository under a root directory.
 

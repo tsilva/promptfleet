@@ -1,0 +1,23 @@
+{
+  "project_name": "promptfleet",
+  "assets": [
+    {
+      "key": "logo-1024",
+      "path": "logo/logo-1024.png",
+      "width": 1024,
+      "height": 1024
+    },
+    {
+      "key": "icon-1024",
+      "path": "icon/icon-1024.png",
+      "width": 1024,
+      "height": 1024
+    },
+    {
+      "key": "root-logo",
+      "path": "../logo.png",
+      "width": 1024,
+      "height": 1024
+    }
+  ]
+}
