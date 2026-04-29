@@ -1,0 +1,16 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "promptfleet"
+version = "0.1.0"
+description = "Run one Codex prompt across every git repository under a root path."
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+promptfleet = "promptfleet.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/promptfleet"]
