@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 import os
 import subprocess
 import sys
@@ -21,6 +23,84 @@ SKIP_DIRS = {
     "dist",
     "node_modules",
 }
+
+
+@dataclass(frozen=True)
+class RepoResult:
+    repo: Path
+    status: str
+    code: int
+    output: str = ""
+
+
+def stored_prompt_dirs() -> list[Path]:
+    """Return prompt directories for source checkouts and installed packages."""
+    package_root = Path(__file__).resolve().parent
+    source_root = package_root.parents[1]
+    dirs = [source_root / "prompts", package_root / "prompts"]
+
+    unique_dirs: list[Path] = []
+    seen: set[Path] = set()
+    for prompt_dir in dirs:
+        resolved = prompt_dir.resolve()
+        if resolved not in seen:
+            seen.add(resolved)
+            unique_dirs.append(prompt_dir)
+
+    return unique_dirs
+
+
+def stored_prompt_files() -> list[Path]:
+    files: list[Path] = []
+    for prompt_dir in stored_prompt_dirs():
+        if not prompt_dir.is_dir():
+            continue
+
+        for path in sorted(prompt_dir.rglob("*")):
+            relative_parts = path.relative_to(prompt_dir).parts
+            has_hidden_part = any(part.startswith(".") for part in relative_parts)
+            if path.is_file() and not has_hidden_part:
+                files.append(path)
+
+    return sorted(files)
+
+
+def format_prompt_matches(matches: list[Path]) -> str:
+    return ", ".join(str(path) for path in matches)
+
+
+def resolve_prompt_file(reference: Path) -> Path:
+    candidate = reference.expanduser()
+    if candidate.exists():
+        return candidate
+
+    is_bare_filename = not candidate.is_absolute() and len(candidate.parts) == 1
+    if not is_bare_filename:
+        raise FileNotFoundError(f"prompt file not found: {reference}")
+
+    stored_prompts = stored_prompt_files()
+    exact_matches = [path for path in stored_prompts if path.name == candidate.name]
+    if len(exact_matches) == 1:
+        return exact_matches[0]
+    if len(exact_matches) > 1:
+        raise ValueError(
+            "stored prompt filename is ambiguous: "
+            f"{candidate.name} matches {format_prompt_matches(exact_matches)}"
+        )
+
+    if candidate.suffix:
+        raise FileNotFoundError(f"prompt file not found: {reference}")
+
+    stem_matches = [path for path in stored_prompts if path.stem == candidate.name]
+    if len(stem_matches) == 1:
+        return stem_matches[0]
+    if len(stem_matches) > 1:
+        raise ValueError(
+            "stored prompt name is ambiguous: "
+            f"{candidate.name} matches {format_prompt_matches(stem_matches)}"
+        )
+
+    raise FileNotFoundError(f"prompt file not found: {reference}")
 
 
 def parse_args() -> argparse.Namespace:
@@ -55,12 +135,19 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Show Codex stdout/stderr instead of hiding it.",
     )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help="Number of repos to process in parallel. Defaults to 1.",
+    )
     return parser.parse_args()
 
 
 def load_prompt(args: argparse.Namespace) -> str:
     if args.prompt_file:
-        return args.prompt_file.expanduser().read_text(encoding="utf-8").strip()
+        prompt_file = resolve_prompt_file(args.prompt_file)
+        return prompt_file.read_text(encoding="utf-8").strip()
     return args.prompt.strip()
 
 
@@ -106,9 +193,9 @@ def tail_output(output: str, max_lines: int = 8) -> str:
 
 
 def run_codex(
-    codex_bin: str, repo: Path, prompt: str, verbose: bool
+    codex_bin: str, repo: Path, prompt: str, verbose: bool, stream_output: bool
 ) -> tuple[int, str]:
-    if verbose:
+    if verbose and stream_output:
         result = subprocess.run([codex_bin, "exec", prompt], cwd=repo, check=False)
         return result.returncode, ""
 
@@ -123,15 +210,130 @@ def run_codex(
     return result.returncode, result.stdout
 
 
+def process_repo(
+    repo: Path,
+    prompt: str,
+    codex_bin: str,
+    require_clean: bool,
+    dry_run: bool,
+    verbose: bool,
+    stream_output: bool,
+) -> RepoResult:
+    if require_clean and not is_clean(repo):
+        return RepoResult(repo=repo, status="skipped dirty", code=0)
+
+    if dry_run:
+        return RepoResult(repo=repo, status="dry run", code=0)
+
+    code, output = run_codex(
+        codex_bin=codex_bin,
+        repo=repo,
+        prompt=prompt,
+        verbose=verbose,
+        stream_output=stream_output,
+    )
+    if code == 0:
+        return RepoResult(repo=repo, status="done", code=0, output=output)
+
+    return RepoResult(repo=repo, status=f"failed exit {code}", code=code, output=output)
+
+
+def print_result(position: int, total: int, result: RepoResult, verbose: bool) -> None:
+    print(progress_line(position, total, result.repo, result.status), flush=True)
+    if result.output.strip() and (verbose or result.code != 0):
+        print(result.output if verbose else tail_output(result.output), flush=True)
+
+
+def run_repos(
+    repos: list[Path],
+    prompt: str,
+    codex_bin: str,
+    require_clean: bool,
+    dry_run: bool,
+    verbose: bool,
+    workers: int,
+) -> tuple[int, int, int]:
+    ok = 0
+    skipped = 0
+    failed = 0
+    total = len(repos)
+    stream_output = workers == 1
+
+    if workers == 1:
+        for position, repo in enumerate(repos, start=1):
+            print()
+            print(progress_line(position, total, repo, "current"), flush=True)
+
+            result = process_repo(
+                repo=repo,
+                prompt=prompt,
+                codex_bin=codex_bin,
+                require_clean=require_clean,
+                dry_run=dry_run,
+                verbose=verbose,
+                stream_output=stream_output,
+            )
+
+            if result.status.startswith("skipped"):
+                skipped += 1
+            elif result.code == 0:
+                ok += 1
+            else:
+                failed += 1
+
+            print_result(position, total, result, verbose)
+
+        return ok, skipped, failed
+
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = [
+            executor.submit(
+                process_repo,
+                repo,
+                prompt,
+                codex_bin,
+                require_clean,
+                dry_run,
+                verbose,
+                stream_output,
+            )
+            for repo in repos
+        ]
+
+        for position, future in enumerate(as_completed(futures), start=1):
+            result = future.result()
+            print()
+
+            if result.status.startswith("skipped"):
+                skipped += 1
+            elif result.code == 0:
+                ok += 1
+            else:
+                failed += 1
+
+            print_result(position, total, result, verbose)
+
+    return ok, skipped, failed
+
+
 def main() -> int:
     args = parse_args()
     root = Path(args.root).expanduser().resolve()
+
+    if args.workers < 1:
+        print("error: --workers must be at least 1", file=sys.stderr)
+        return 2
 
     if not root.exists() or not root.is_dir():
         print(f"error: root is not a directory: {root}", file=sys.stderr)
         return 2
 
-    prompt = load_prompt(args)
+    try:
+        prompt = load_prompt(args)
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
     if not prompt:
         print("error: prompt is empty", file=sys.stderr)
         return 2
@@ -144,38 +346,18 @@ def main() -> int:
         return 0
 
     print(f"Found {total} git repositories under {root}")
+    if args.workers > 1:
+        print(f"Running with {args.workers} workers")
 
-    ok = 0
-    skipped = 0
-    failed = 0
-
-    for position, repo in enumerate(repos, start=1):
-        print()
-        print(progress_line(position, total, repo, "current"), flush=True)
-
-        if args.require_clean and not is_clean(repo):
-            skipped += 1
-            print(progress_line(position, total, repo, "skipped dirty"), flush=True)
-            continue
-
-        if args.dry_run:
-            ok += 1
-            print(progress_line(position, total, repo, "dry run"), flush=True)
-            continue
-
-        code, output = run_codex(args.codex_bin, repo, prompt, args.verbose)
-
-        if code == 0:
-            ok += 1
-            print(progress_line(position, total, repo, "done"), flush=True)
-        else:
-            failed += 1
-            print(
-                progress_line(position, total, repo, f"failed exit {code}"),
-                flush=True,
-            )
-            if output.strip():
-                print(tail_output(output), flush=True)
+    ok, skipped, failed = run_repos(
+        repos=repos,
+        prompt=prompt,
+        codex_bin=args.codex_bin,
+        require_clean=args.require_clean,
+        dry_run=args.dry_run,
+        verbose=args.verbose,
+        workers=args.workers,
+    )
 
     print()
     print(f"Summary: {ok} ok, {skipped} skipped, {failed} failed")

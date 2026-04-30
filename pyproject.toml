@@ -14,3 +14,6 @@ promptfleet = "promptfleet.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/promptfleet"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"prompts" = "promptfleet/prompts"

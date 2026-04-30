@@ -29,6 +29,18 @@ Run the prompt in each discovered repository:
 uv run promptfleet /path/to/repos --prompt "Update the README" --require-clean
 ```
 
+Use a stored prompt by filename:
+
+```bash
+uv run promptfleet /path/to/repos --prompt-file github-actions-ci-cd --require-clean
+```
+
+Run multiple repos in parallel:
+
+```bash
+uv run promptfleet /path/to/repos --prompt-file github-actions-ci-cd --require-clean --workers 4
+```
+
 ## Commands
 
 ```bash
@@ -43,6 +55,8 @@ uv build                        # build source and wheel distributions
 - Requires Python 3.11 or newer.
 - Requires the Codex CLI on `PATH`, unless you pass a different executable with `--codex-bin`.
 - Accepts either `--prompt` text or `--prompt-file`.
+- `--prompt-file` accepts a normal path, or a bare filename that matches a file in this repo's `prompts/` directory. For stored prompts, the extension is optional when the name is unambiguous.
+- `--workers N` runs up to `N` repos in parallel, with one Codex instance per active worker.
 - Skips common cache, build, virtualenv, and dependency folders while scanning.
 - With `--require-clean`, repos with staged or unstaged changes are skipped.
 - Without `--verbose`, Codex output is hidden unless a repo fails; failures print the last few non-empty output lines.
