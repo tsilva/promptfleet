@@ -1,10 +1,3 @@
-<!-- archive-repo:deprecation-notice:start -->
-> [!WARNING]
-> **Deprecated**
->
-> I've moved Promptfleet's main use case of maintaining guidelines across multiple repositories to [RepoMan](https://github.com/tsilva/repoman).
-<!-- archive-repo:deprecation-notice:end -->
-
 <p align="center">
   <img src="./logo.png" alt="Promptfleet logo" width="200" />
   <br />
@@ -12,6 +5,13 @@
   <strong>🚀 Run one Codex prompt across every local repo 🚀</strong>
   <!-- repo-tagline:end -->
 </p>
+
+<!-- archive-repo:deprecation-notice:start -->
+> [!WARNING]
+> **Deprecated**
+>
+> I've moved Promptfleet's main use case of maintaining guidelines across multiple repositories to [RepoMan](https://github.com/tsilva/repoman).
+<!-- archive-repo:deprecation-notice:end -->
 
 <p align="center">
   <a href="https://github.com/tsilva/promptfleet/actions/workflows/secret-scanning.yml"><img src="https://github.com/tsilva/promptfleet/actions/workflows/secret-scanning.yml/badge.svg?branch=main" alt="Secret scanning status" /></a>
