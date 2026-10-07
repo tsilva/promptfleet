@@ -33,73 +33,10 @@ class RepoResult:
     output: str = ""
 
 
-def stored_prompt_dirs() -> list[Path]:
-    """Return prompt directories for source checkouts and installed packages."""
-    package_root = Path(__file__).resolve().parent
-    source_root = package_root.parents[1]
-    dirs = [source_root / "prompts", package_root / "prompts"]
-
-    unique_dirs: list[Path] = []
-    seen: set[Path] = set()
-    for prompt_dir in dirs:
-        resolved = prompt_dir.resolve()
-        if resolved not in seen:
-            seen.add(resolved)
-            unique_dirs.append(prompt_dir)
-
-    return unique_dirs
-
-
-def stored_prompt_files() -> list[Path]:
-    files: list[Path] = []
-    for prompt_dir in stored_prompt_dirs():
-        if not prompt_dir.is_dir():
-            continue
-
-        for path in sorted(prompt_dir.rglob("*")):
-            relative_parts = path.relative_to(prompt_dir).parts
-            has_hidden_part = any(part.startswith(".") for part in relative_parts)
-            if path.is_file() and not has_hidden_part:
-                files.append(path)
-
-    return sorted(files)
-
-
-def format_prompt_matches(matches: list[Path]) -> str:
-    return ", ".join(str(path) for path in matches)
-
-
 def resolve_prompt_file(reference: Path) -> Path:
     candidate = reference.expanduser()
-    if candidate.exists():
+    if candidate.is_file():
         return candidate
-
-    is_bare_filename = not candidate.is_absolute() and len(candidate.parts) == 1
-    if not is_bare_filename:
-        raise FileNotFoundError(f"prompt file not found: {reference}")
-
-    stored_prompts = stored_prompt_files()
-    exact_matches = [path for path in stored_prompts if path.name == candidate.name]
-    if len(exact_matches) == 1:
-        return exact_matches[0]
-    if len(exact_matches) > 1:
-        raise ValueError(
-            "stored prompt filename is ambiguous: "
-            f"{candidate.name} matches {format_prompt_matches(exact_matches)}"
-        )
-
-    if candidate.suffix:
-        raise FileNotFoundError(f"prompt file not found: {reference}")
-
-    stem_matches = [path for path in stored_prompts if path.stem == candidate.name]
-    if len(stem_matches) == 1:
-        return stem_matches[0]
-    if len(stem_matches) > 1:
-        raise ValueError(
-            "stored prompt name is ambiguous: "
-            f"{candidate.name} matches {format_prompt_matches(stem_matches)}"
-        )
-
     raise FileNotFoundError(f"prompt file not found: {reference}")
 
 

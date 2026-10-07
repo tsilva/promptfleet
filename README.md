@@ -1,14 +1,20 @@
-<div align="center">
-  <img src="./logo.png" alt="promptfleet" width="420" />
+<p align="center">
+  <img src="./logo.png" alt="Promptfleet logo" width="200" />
+  <br />
+  <!-- repo-tagline:start -->
+  <strong>🚀 Run one Codex prompt across every local repo 🚀</strong>
+  <!-- repo-tagline:end -->
+</p>
 
-  **🚀 Run one Codex prompt across every local repo 🚀**
-</div>
+<p align="center">
+  <a href="https://github.com/tsilva/promptfleet/actions/workflows/secret-scanning.yml"><img src="https://github.com/tsilva/promptfleet/actions/workflows/secret-scanning.yml/badge.svg?branch=main" alt="Secret scanning status" /></a>
+</p>
 
-promptfleet is a small Python CLI for running one Codex prompt across every git repository under a root directory.
-
-Use it when you keep many local repos in one folder and want Codex to apply the same instruction in each repository, with optional clean-working-tree checks and concise terminal progress.
+promptfleet is a Python CLI for developers who want to apply the same Codex instruction across many local Git repositories. Use it for occasional bulk changes, such as updating documentation or applying a repository policy. Give it a parent directory and a prompt; it discovers repositories, runs Codex in each one, and reports progress.
 
 ## Install
+
+Requires Python 3.11+, [uv](https://docs.astral.sh/uv/), Git, and a working Codex CLI.
 
 ```bash
 git clone https://github.com/tsilva/promptfleet.git
@@ -17,55 +23,54 @@ uv sync
 uv run promptfleet --help
 ```
 
-Run a dry scan before executing Codex:
+Run `uv run promptfleet --help` to see all options.
+
+## Use
+
+Replace `/path/to/repos` with your repositories' parent directory. Preview the targets before running Codex:
 
 ```bash
 uv run promptfleet /path/to/repos --prompt "Update the README" --dry-run
 ```
 
-Run the prompt in each discovered repository:
+Run the same instruction in each clean repository, with up to four workers:
 
 ```bash
-uv run promptfleet /path/to/repos --prompt "Update the README" --require-clean
+uv run promptfleet /path/to/repos --prompt "Update the README" --require-clean --workers 4
 ```
 
-Use a stored prompt by filename:
+Or read the instruction from a file:
 
 ```bash
-uv run promptfleet /path/to/repos --prompt-file github-actions-ci-cd --require-clean
+uv run promptfleet /path/to/repos --prompt-file /path/to/prompt.md --require-clean
 ```
 
-Run multiple repos in parallel:
-
-```bash
-uv run promptfleet /path/to/repos --prompt-file github-actions-ci-cd --require-clean --workers 4
-```
+For reusable policies, invoke an installed Codex skill through `--prompt` so the instructions stay centralized. Canonical maintenance instructions live in `$run-maintenance`; promptfleet does not bundle copies.
 
 ## Commands
 
 ```bash
-uv sync                         # create the local environment
-uv run promptfleet --help       # show CLI options
-uv run promptfleet ROOT --prompt "..." --dry-run
-uv build                        # build source and wheel distributions
+uv sync                    # create or update the local environment
+uv run promptfleet --help  # show CLI options
+uv build                   # build source and wheel distributions
 ```
 
 ## Notes
 
-- Requires Python 3.11 or newer.
-- Requires the Codex CLI on `PATH`, unless you pass a different executable with `--codex-bin`.
-- Accepts either `--prompt` text or `--prompt-file`.
-- `--prompt-file` accepts a normal path, or a bare filename that matches a file in this repo's `prompts/` directory. For stored prompts, the extension is optional when the name is unambiguous.
-- `--workers N` runs up to `N` repos in parallel, with one Codex instance per active worker.
-- Skips common cache, build, virtualenv, and dependency folders while scanning.
-- With `--require-clean`, repos with staged or unstaged changes are skipped.
-- Without `--verbose`, Codex output is hidden unless a repo fails; failures print the last few non-empty output lines.
-- The project currently has no third-party Python dependencies.
+- Runs `codex exec` in each repository's current working directory. Use `--codex-bin` if Codex is not on `PATH`.
+- Accepts exactly one of `--prompt` or `--prompt-file`. Prompt files use explicit paths and UTF-8 text.
+- Scans recursively, skips hidden and common cache/build/dependency folders, and stops descending once it finds a repository. Repositories under `.archived` are skipped.
+- `--require-clean` skips repositories with staged, unstaged, or untracked files. Without it, Codex runs in the existing working tree.
+- `--workers N` runs up to `N` repositories in parallel; the default is one. Each worker starts its own Codex process.
+- Prints a final count of successful, skipped, and failed runs. `done` means Codex exited successfully; verify the resulting changes before publishing them.
+- `--verbose` shows Codex output. Otherwise, failed runs print only the last eight non-empty output lines.
+- Returns exit code `1` if any Codex run fails. Skipped repositories do not count as failures.
+- The CLI has no third-party runtime dependencies.
 
 ## Architecture
 
-![promptfleet architecture diagram](./architecture.png)
+![Promptfleet repository discovery, Codex execution, and reporting](./architecture.png)
 
 ## License
 
-No license file is currently included.
+[MIT](LICENSE)
