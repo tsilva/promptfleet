@@ -1,3 +1,10 @@
+<!-- archive-repo:deprecation-notice:start -->
+> [!WARNING]
+> **Deprecated**
+>
+> I've moved Promptfleet's main use case of maintaining guidelines across multiple repositories to [RepoMan](https://github.com/tsilva/repoman).
+<!-- archive-repo:deprecation-notice:end -->
+
 <p align="center">
   <img src="./logo.png" alt="Promptfleet logo" width="200" />
   <br />
